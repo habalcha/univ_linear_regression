@@ -1,0 +1,664 @@
+---
+title: "Linear Regression Function"
+author: "Hermi Balcha"
+date: "11/22/2020"
+output: html_document
+---
+## Dataset
+The dataset used is a dataset from the World Health Organization (https://www.kaggle.com/kumarajarshi/life-expectancy-who). I use this data to predict and explain life expectancy. 
+
+## Overall Project Objective
+My plan for this linear regression function is to have something that can be called once and perform the required test, choices and graphs to give a good predictive and explanatory model. The function mainly prints the steps taken, the outcome of those steps and the reason for those steps. Even though that was the plan, there were some unavoidable data cleanup situations. When those occur, I left a #not universal comment.
+
+## Issues with the function
+The function runs into problems when trying to transform the data. This is because, in an effort to make the function work with most numerical data, I used paste(y~ ...) for the lm() and glmnet() calls. Even though they work perfectly there, the transformations could not be completed automatically. Instead, I have included a dependent function for transformations that need to be called manually and printed out statements where the transformation is applied.
+
+## Running a predictive model
+
+```{r, echo = FALSE, comment = "       "}
+
+# linear regression function
+# defaults to exploratory data
+lin_reg <- function(X, y, predictive = FALSE, exploratory = TRUE){
+  suppressMessages(library(GGally))
+  suppressMessages(library(glmnet))
+  suppressMessages(library(ISLR))
+  
+  # basic structure of the data
+  combined <- X [,-1] #get rid of first column - country ############## not universal
+  combined$y <- y
+  print("*****************************************************************************************")
+  print("                             Basic Data Cleanup                                          ")
+  print("*****************************************************************************************")
+  print("                                                                                         ")
+  print("_________________________________________________________________________________________")
+  print("                               Head of the dataset                                       ")
+  print("_________________________________________________________________________________________")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  
+  print(head(X, 3))
+  
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("_________________________________________________________________________________________")
+  print("                                 Summary of the dataset                                  ")
+  print("_________________________________________________________________________________________")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  
+  print(summary(X))
+  
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("_________________________________________________________________________________________")
+  print("                                  Missing Data                                           ")
+  print("_________________________________________________________________________________________")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  
+  combined <- lin_reg.missing.data(combined)
+  
+  print("                                                                                         ")
+  print("*****************************************************************************************")
+  print("                                    Data Visualization                                   ")
+  print("*****************************************************************************************")
+  print("                                                                                         ")
+  
+  X <-combined[,-ncol(combined)]
+  y <- combined$y
+  
+  # this could take a while to run if the dataset has a lot of columns
+  lin_reg.visualize(combined, X, y)
+  
+  print("                                                                                         ")
+  print("                                                                                         ")
+  
+  if (predictive == FALSE && exploratory == TRUE){
+    print("*****************************************************************************************")
+    print("                           Exploratory Regression                                        ")
+    print("*****************************************************************************************")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    print("_________________________________________________________________________________________")
+    print("                   Variable selection using Lasso                                        ")
+    print("_________________________________________________________________________________________")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    
+    # train lm model using features selected from lasso
+    X_lasso <- lin_reg.lasso_features(combined, X, y)
+    X_lasso$y <- y 
+    
+    exp_reg <- lm(y~., data = X_lasso)
+    print(summary(exp_reg))
+    
+    # lin_reg.model_selection(X_lasso, exp_reg)
+    
+    x = lin_reg.diagnostics(exp_reg)
+    exp_reg_vals <- model.matrix(y~., data = X_lasso)
+
+    # if (x==1){
+    #   suppressMessages(library(MASS))
+    #   bc <- boxcox(exp_reg_vals)
+    #   lambda <- bc$x[which.max(bc$y)]
+    # 
+    #   # lambda <- lin_reg.transformation(exp_reg, X_lasso)
+    #   y_string <- paste(lambda, "*y~.")
+    #   exp_reg <- lm(paste(y_string), data = X_lasso)
+    #   print(summary(exp_reg))
+    # }
+    
+
+
+  } else if (predictive == TRUE) {
+    print("*****************************************************************************************")
+    print("                           Predictive Regression                                         ")
+    print("*****************************************************************************************")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    
+    set.seed(1) # for checking
+    print("33.3% of data held for testing.                                                          ")
+    print("The objective is to minimize MSPE.                                                       ")
+    print("                                                                                         ")
+    train <- sample(1:nrow(X), nrow(X) / 3)
+    test <- (-train)
+    
+    x_vals = model.matrix(y ~., data = combined)
+    
+    y.train <- y[train]
+    y.test <- y[test]
+    
+    X.train <- x_vals[train, ]
+    X.test <- x_vals[test, ]
+    #### OLS Regression
+    
+    
+    #### Ridge Regression
+    # grid of lambda for choosing the best lambda
+    grid.lambda <- 10^seq(10, -2, length = 100)
+    
+    ridge.model.train <- glmnet(X.train, y.train, alpha = 0, lambda = grid.lambda)
+    print("                                                                                         ")
+    print("Shrinkage Effect of Ridge on the Entire Model:                                           ")
+    print("                                                                                         ")
+    plot(ridge.model.train)
+    
+    cv.out <- cv.glmnet(X.train, y.train, alpha = 0)
+    plot(cv.out)
+    
+    #Find the best lambda value
+    ridge.best.lambda <- cv.out$lambda.min
+    
+    ridge.pred <- predict(ridge.model.train, s = ridge.best.lambda, newx = X.test)
+    
+    
+    
+    
+    #### Lasso Regression
+    # grid of lambda for choosing the best lambda
+    grid.lambda <- 10^seq(10, -2, length = 100)
+    
+    lasso.model.train <- glmnet(X.train, y.train, alpha = 1, lambda = grid.lambda)
+    print("                                                                                         ")
+    print("Shrinkage Effect of Lasso on the Entire Model:                                           ")
+    print("                                                                                         ")
+    plot(ridge.model.train)
+    
+    cv.out <- cv.glmnet(X.train, y.train, alpha = 1)
+    plot(cv.out)
+    
+    #Find the best lambda value
+    lasso.best.lambda <- cv.out$lambda.min
+    
+    lasso.pred <- predict(lasso.model.train, s = lasso.best.lambda, newx = X.test)
+    
+    # final.model <- glmnet(x, y, alpha = 1, lambda = best.lambda)
+    
+    # model.compare
+    print("Comparing Ridge and Lasso regression:                                                    ")
+    print("                                                                                         ")
+    
+    alpha_val <- lin_reg.compare.models2(X.test, y.test, ridge.pred, lasso.pred, ridge, lasso)
+    
+    if (alpha_val == 1){
+      print("The best predictive model is Lasso.                                                      ")
+      final.model <- glmnet(x_vals, y, alpha = alpha_val, lambda = lasso.best.lambda)
+    } else{
+      print("The best predictive model is Ridge.                                                    ")
+      final.model <- glmnet(x_vals, y, alpha = alpha_val, lambda = ridge.best.lambda)
+    }
+    
+    print("                                                                                         ")
+    print("Coefficients of the final model:                                                         ")
+    print("                                                                                         ")
+    print(coef(final.model))
+    print("                                                                                         ")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    }
+  
+} # end lin_reg
+
+################## Requirement 2 ################################# 
+# Check for outliers, influential points, and points of high leverage
+# handle missing data
+lin_reg.missing.data <- function(combined){
+  # check if there are any missing values in X and y
+    if (any(is.na(combined)) == FALSE){
+      print("There are no missing values in X.                                                        ")
+      
+      # missing data
+    } else{
+      how.many.nas <- sapply(combined, function(x) sum(is.na(x)))
+      print("There are missing values in X.                                                           ")
+      
+      # check if 50% of data is missing
+      indx.remove <- which(how.many.nas > dim(combined)[1]/2)
+      names(combined)[indx.remove]
+      
+      print("                                                                                         ")
+      print("Columns missing 50% of their data have been removed.                                     ")
+      print("                                                                                         ")
+      
+      # remove columns with 50% missing data
+      if (length(indx.remove) != 0){
+        combined <- combined[, -indx.remove]
+      }
+      
+      
+      X <-combined[,-1]
+      
+      # check if number of rows is > 1000
+      # if greater than 1000, remove rows with missing data
+      if (nrow(X) > 1000){
+        print("Since number of rows is greater than 1000, rows with missing data have been removed.     ")
+        print("                                                                                         ")
+        combined <- na.omit(combined)
+        
+        # if less than 1000, fill the missing data with average
+        # causes issues if data isn't numerical ########################
+        # isn't really helpful #########################################
+        
+      } else {
+        print("Rows with missing data have been assigned the average of that column.                    ")
+        print("                                                                                         ")
+        for (i in 1:nrow(combined)){
+          for (j in 1:ncol(combined)){
+            if (is.na(combined[i][j])){
+              combined[i][j] = mean(combined[,j])
+            }
+          }
+        }
+        rows.update <- which(is.na(combined) == TRUE)
+      }
+      
+      print("Number of rows remaining:                                                                ")
+      print(nrow(combined))
+      print("                                                                                         ")
+      print("Number of columns remaining (excludes y):                                                ")
+      print(ncol(combined) - 1)
+      print("                                                                                         ")
+      print("                                                                                         ")
+    }
+  print("Outliers in y:                                                                       ")
+  outliers <- boxplot(combined$y, ylab = "y")$out
+  # print(ggplot(combined, aes(x = combined$y)) + geom_boxplot() + xlab("y") 
+  #       + theme_minimal())
+  print(outliers)
+  print("                                                                                         ")
+  print("Outliers have been removed.                                                              ")
+  return(combined) 
+}
+
+
+# data visualization for all x and y
+lin_reg.visualize <- function(combined, X, y){
+  print("Distribution of y:                                                                       ")
+  print(ggplot(combined, aes(x = combined$y)) + geom_histogram(bins=30) + xlab("y") 
+        + theme_minimal())
+  
+  graphing_data <- data.frame(y)
+  
+  for ( i in 1:ncol(X)){
+    if (typeof(X[,i]) == "chr" && length(unique(X[,i])) < 15){
+      graphing_data[,ncol(graphing_data) + 1] <- X[, i]
+      colnames(graphing_data)[ncol(graphing_data)] = colnames(X)[i]
+    } else if (typeof(X[,i]) == "int" ||typeof(X[,i]) == "double" || typeof(X[,i]) == "float"){
+      graphing_data[,ncol(graphing_data) + 1] <- X[,i]
+      colnames(graphing_data)[ncol(graphing_data)] = colnames(X)[i]
+    }
+  }
+  
+  # print(dim(graphing_data))
+  # print(head(graphing_data))
+  print("                                                                                         ")
+  print("Graphical distribution and correlation of columns with y:                                ")
+  print("                                                                                         ")
+  
+  i = ncol(graphing_data)
+  
+  while (i > 3){
+    print(ggpairs(graphing_data[,1:3]))
+    graphing_data <- subset (graphing_data, select = -c(2,3))
+    i = i-2
+  }
+  print(ggpairs(graphing_data))
+}
+
+
+# feature selection using lasso regression
+# returns string of features to be added to a model
+lin_reg.lasso_features <- function(combined, X, y){
+  # change x values into a matrix
+    x_vals = model.matrix(y ~., data = combined)
+    
+    y <- combined$y
+    
+    # cross validation on data
+    cv.out = cv.glmnet(x_vals, y, alpha=0)
+
+    # best lambda value
+    bestlam =cv.out$lambda.min
+    bestlam
+    
+    
+    #Fit the final model to the entire data set using the chosen lambda
+    lasso.final.model <- glmnet(x_vals, y, alpha = 1, lambda = bestlam)
+    Coef.Lasso <- coef(lasso.final.model)[1:22, ] ########## not universal
+    
+    print("Variable weights from lasso regression:                                                  ")
+    print("                                                                                         ")
+    print(Coef.Lasso)
+    print("                                                                                         ")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    print("_________________________________________________________________________________________")
+    print("         Train a linear regression model using coefficents that are not equal to 0       ")
+    print("_________________________________________________________________________________________")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    print("                                                                                         ")
+    
+    ##### get column names that don't have a coefficient of 0
+    
+    X_cols <- data.frame(colnames(X))
+    
+    # add intercepts to names
+    X_cols <- rbind("Intercept1", "Intercept2", X_cols)
+    X_cols <- cbind(X_cols, Coef.Lasso)
+    
+    # remove all coefficients with 0
+    vals <- which(Coef.Lasso == 0)
+    X_cols <- X_cols[-vals, ]
+    
+    # Get the columns going into the lm model
+    lasso.columns <- X_cols$colnames.X
+    
+    vals <- match(lasso.columns, colnames(X))
+    vals <- vals[-1] # intercept
+    
+    X_ret <- X[vals]
+    
+    return(X_ret)
+    
+    # # # loop through coefficients and add to the formula string
+    # # for (i in lasso.columns){
+    # #   X_ret <- cbind(X_ret, X)
+    # # }
+    #  
+    # # remove the word intercept1 from model
+    # string_lasso <- substring(string_lasso, 15, nchar(string_lasso) - 3)
+    # 
+    # return(string_lasso)
+    
+    
+    
+    # # loop through coefficients and add to the formula string
+    # for (i in lasso.columns){
+    #   string_lasso <- paste(string_lasso, i, " + ")
+    # }
+    #  
+    # # remove the word intercept1 from model
+    # string_lasso <- substring(string_lasso, 15, nchar(string_lasso) - 3)
+    # 
+    # return(string_lasso)
+}
+
+
+# feature selection using lasso regression
+# returns string of features to be added to a model
+lin_reg.lasso_feat <- function(combined, X, y){
+  # change x values into a matrix
+    x_vals = model.matrix(y ~., data = combined)
+    
+    y <- combined$y
+    
+    # cross validation on data
+    cv.out = cv.glmnet(x_vals, y, alpha=0)
+
+    # best lambda value
+    bestlam =cv.out$lambda.min
+    bestlam
+    
+    
+    #Fit the final model to the entire data set using the chosen lambda
+    lasso.final.model <- glmnet(x_vals, y, alpha = 1, lambda = bestlam)
+    Coef.Lasso <- coef(lasso.final.model)[1:22, ] ########## not universal
+    
+    ##### get column names that don't have a coefficient of 0
+    
+    X_cols <- data.frame(colnames(X))
+    
+    # add intercepts to names
+    X_cols <- rbind("Intercept1", "Intercept2", X_cols)
+    X_cols <- cbind(X_cols, Coef.Lasso)
+    
+    # remove all coefficients with 0
+    vals <- which(Coef.Lasso == 0)
+    X_cols <- X_cols[-vals, ]
+    
+    # build the formula string for an lm model
+    lasso.columns <- X_cols$colnames.X
+    
+    string_lasso <- ""
+    
+    # loop through coefficients and add to the formula string
+    for (i in lasso.columns){
+      string_lasso <- paste(string_lasso, i, " + ")
+    }
+     
+    # remove the word intercept1 from model
+    string_lasso <- substring(string_lasso, 15, nchar(string_lasso) - 3)
+    
+    return(string_lasso)
+}
+
+
+################## Requirement 1 #################################
+# Compare lasso, ridge and OLS
+
+lin_reg.compare.models2 <- function(x.test, y.test, ridge.pred,  lasso.pred, ridge, lasso){
+  # takes the predicted values of the models and compares the models by using the y.test values
+    # get the mspe of the models
+    mspe.ridge <- mean((ridge.pred - y.test)^2)
+    mspe.lasso <- mean((lasso.pred - y.test)^2)
+    
+    # compare the mspe of the model
+    MSPE <- data.frame(Ridge = mspe.ridge, Lasso = mspe.lasso)
+    print("Comparing the MSPE of the two models, we get:                                            ")
+    print("                                                                                         ")
+    print(MSPE)
+    if (mspe.ridge < mspe.lasso){
+      return(0)
+    } else {
+      return(1)
+    }
+}
+
+lin_reg.compare.models3 <- function(x.test, y.test, model1.pred,  model2.pred, model3.pred){
+  # takes the predicted values of the models and compares the models by using the y.test values
+  # get the mspe of the models
+    mspe.model1 <- mean((model1.pred - y.test)^2)
+    mspe.Model2 <- mean((model2.pred - y.test)^2)
+    mspe.model3 <- mean((model3.pred - y.test)^2)
+    
+        
+    print("Comparing the coefficients of the three models, we get:                                  ")
+    print("                                                                                         ")
+    
+    # compare the coefficients of the model
+    Coefficients.models <- data.frame(Model1 = coef(model1), Model2 = coef(Model2), Model3 = coef(model3))
+    print(Coefficients.models)
+    
+    # compare the mspe of the model
+    MSPE <- data.frame(Model1 = mspe.model1, Model2 = mspe.Model2, Model3 = mspe.model3)
+    print("Comparing the MSPE of the three models, we get:                                          ")
+    print("                                                                                         ")
+    print(MSPE)
+}
+
+
+
+################## Requirement 3 ################################# 
+# Model selection using various metrics (MSE, AIC, BIC, Mallow’sCp, AdjustedR2)
+
+lin_reg.model_selection <- function(combined, model){
+    print("                                                                                         ")
+    print("                                                                                         ")
+    print("_________________________________________________________________________________________")
+    print("                   Feature selection using AIC, BIC                                      ")
+    print("_________________________________________________________________________________________")
+    print("                                                                                         ")
+    print("                                                                                         ")
+  #AIC
+  require(leaps)
+  b<-regsubsets(y~., data = combined)
+  rs<-summary(b)
+  rs$which
+  AIC<-50*log(rs$rss/50) + (2:9)*2
+  val <- which.min(AIC)
+  plot(AIC, ylab="AIC", xlab="Number of Predictors")
+  print("The number of features that minimizes AIC is:                        ")
+  print(val)
+  
+  regfit.full=regsubsets (y~., data = combined)
+  summary(regfit.full)
+  
+  regfit.full=regsubsets (y~., data = combined ,nvmax=19)
+  reg.summary =summary (regfit.full)
+  
+  par(mfrow=c(2,2))
+  plot(reg.summary$rss ,xlab="Number of Variables ",ylab="RSS",
+  type="l")
+  plot(reg.summary$adjr2 ,xlab="Number of Variables ",
+  ylab="Adjusted RSq",type="l")
+  
+  which.max(reg.summary$adjr2)
+  points (11,reg.summary$adjr2[11], col="red",cex=2,pch =20)
+  
+  plot(reg.summary$cp ,xlab="Number of Variables ",ylab="Cp",type="l")
+  which.min(reg.summary$cp )
+  points (10,reg.summary$cp [10], col ="red",cex=2,pch =20)
+  which.min(reg.summary$bic )
+  plot(reg.summary$bic ,xlab="Number of Variables ",ylab="BIC", type="l")
+  points (6,reg.summary$bic [6],col="red",cex=2,pch =20)
+  
+  
+  plot(regfit.full ,scale="r2")
+  plot(regfit.full ,scale="adjr2")
+  plot(regfit.full ,scale="Cp")
+  plot(regfit.full ,scale="bic")
+  
+  coef(regfit.full ,6)
+  
+  regfit.fwd=regsubsets (y~., data = combined , nvmax=19, method ="forward")
+  summary (regfit.fwd)
+  regfit.bwd=regsubsets (y~., data = combined, nvmax=19, method ="backward")
+  summary (regfit.bwd)
+  
+  coef(regfit.full ,7)
+  coef(regfit.fwd ,7)
+  coef(regfit.bwd ,7)
+  
+}
+
+
+################## Requirement 4 #################################
+# Formal F-tests to check nested models when appropriate
+
+lin_reg.check_nested <- function(model1, model2){
+  test <- anova(model1, model2)
+  print(test)
+  p_val <- summary(test)[[1]][["Pr(>F)"]]
+  
+  if (p_val < 0.05){
+    print("Our P-value is less than 0.05 and we reject our hypothesis. The more complex model is better")
+    print("                                                                                         ")
+    return (1)
+  } else {
+    print("Our P-value is more than 0.05 and we fail to reject our hypothesis. The less complex model is better.  ")
+    print("                                                                                         ")
+    return (2)
+  }
+}
+  
+
+################## Requirement 5 #################################
+# Diagnostics - normality, homoscedasticity, and linearity
+lin_reg.diagnostics <- function(full.model){
+  suppressMessages(library(lmtest))
+  print("                                                                                         ")
+  print("                                                                                         ")
+  print("Performing diagnostic tests on this model:                                               ")
+  print("                                                                                         ")
+  print("                                                                                         ")
+  
+  fitted.values <- full.model$fitted.values
+  residuals <- full.model$residuals
+  
+  
+  # normality
+  #wilks-shapiro test
+  # H0: residuals are normal
+  
+  shapiro_results <- shapiro.test(residuals)
+  print("                                                                                         ")
+  print("Performed wilks-shapiro test of normality.                                               ")
+  if (shapiro_results$p.value < 0.05){
+    print("Residuals are not normally distributed! We don't want that.                            ")
+  } else {
+    print("Residuals are normally distributed!")
+  }
+  
+  
+  
+  # homoscedasticity
+  # Breusch–Pagan test
+  # H0: homoskedasticity
+  bp_results <- bptest(full.model)
+  print("                                                                                         ")
+  print("Performed Breusch-pagan test of homoskedasticity.                                        ")
+  if (bp_results$p.value < 0.05){
+    print("The variablity of variance is heteroskedastic! We don't want that.                     ")
+  } else {
+    print("The variablity of variance is homoskedastic!")
+  }
+  
+  # linearity
+  lin_test <- cor(fitted.values, residuals)
+  print("                                                                                         ")
+  print("Testing Linearity based on correlation of fitted values and residuals.                   ")
+  if (lin_test < 0.01){
+    print("The correlation between the fitted values and residuals is low! Correllation is:       ")
+    print(lin_test)
+  } else {
+    print("The correlation between the fitted values and residuals is relatively high ( > 0.1).   ") 
+    print("This suggests that the linearlity assumption might not be fullfilled.                  ")
+    print(lin_test)
+  }
+  
+  if(bp_results$p.value < 0.05 || shapiro_results$p.value < 0.05){
+    return(1)
+  } else {
+    return(0)
+  }
+}
+
+
+################## Requirement 6 #################################
+# transformations on y
+# doesn't work if we have paste(y~, string_lasso)
+lin_reg.transformation<- function(full.model, data){
+  library(MASS)
+  
+  bc <- boxcox(full.model)
+  lambda <- bc$x[which.max(bc$y)]
+  
+  return(lambda)
+  
+  
+}
+  
+
+life_expect <- read.table(file = "Life_Expectancy_Data.csv", header = TRUE, sep = ",")
+
+X <- life_expect[,-4]
+y <- life_expect$Life.expectancy
+
+lin_reg(X, y, predictive = TRUE)
+```
+
+
+## Exploritory model
+For the exploratory model, I used Lasso for feature selection since it run faster and was universal to the fucntion than completing AIC, BIC and AdjustedR2. The function for those is still provided as a dependent function and can be switched.
+
+```{r}
+lin_reg(X, y)
+  
+```
